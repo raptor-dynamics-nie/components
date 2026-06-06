@@ -1,0 +1,6 @@
+@echo off
+title Raptor Dynamics Component Manager
+echo Starting Raptor Dynamics Component Manager...
+echo Please wait...
+node server.cjs
+pause
