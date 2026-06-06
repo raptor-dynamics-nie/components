@@ -78,6 +78,11 @@ function App() {
     setSyncing(false);
   };
 
+  const refreshCategories = async () => {
+    setSyncing(true);
+    await loadCategories();
+  };
+
   // Fetch data from Firebase Real-time
   useEffect(() => {
     const timeout = setTimeout(() => setLoading(false), 500);
@@ -116,6 +121,7 @@ function App() {
     try {
       const { error } = await supabase.from('components').upsert(newCat, { onConflict: 'id' });
       if (error) throw error;
+      await refreshCategories();
       setSelectedCategoryId(newId);
       setView('detail');
     } catch (e: any) {
@@ -165,6 +171,7 @@ function App() {
     try {
       const { error } = await supabase.from('components').upsert(updatedCategory, { onConflict: 'id' });
       if (error) throw error;
+      await refreshCategories();
     } catch (e: any) {
       alert("Error saving serial number: " + e.message);
     }
@@ -185,6 +192,7 @@ function App() {
     try {
       const { error } = await supabase.from('components').upsert(updatedCategory, { onConflict: 'id' });
       if (error) throw error;
+      await refreshCategories();
     } catch (e: any) {
       alert("Error deleting serial number: " + e.message);
     }
@@ -224,6 +232,7 @@ function App() {
     try {
       const { error } = await supabase.from('components').upsert(updatedCategory, { onConflict: 'id' });
       if (error) throw error;
+      await refreshCategories();
     } catch (e: any) {
       alert("Failed to check-out: " + e.message);
     }
@@ -249,6 +258,7 @@ function App() {
     try {
       const { error } = await supabase.from('components').upsert(updatedCategory, { onConflict: 'id' });
       if (error) throw error;
+      await refreshCategories();
     } catch (e: any) {
       alert("Failed to check-in: " + e.message);
     }
