@@ -31,6 +31,7 @@ function App() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(true);
+  const todayDateValue = new Date().toISOString().slice(0, 10);
   
   // Navigation State
   const [view, setView] = useState<'dashboard' | 'detail'>('dashboard');
@@ -44,15 +45,19 @@ function App() {
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showAddInstanceModal, setShowAddInstanceModal] = useState(false);
   const [showBorrowModal, setShowBorrowModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
   
   // Forms
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newSerialNumber, setNewSerialNumber] = useState('');
   
   const [selectedInstanceForBorrow, setSelectedInstanceForBorrow] = useState<string | null>(null);
+  const [selectedInstanceForReturn, setSelectedInstanceForReturn] = useState<string | null>(null);
   const [borrowerName, setBorrowerName] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [borrowReason, setBorrowReason] = useState('');
+  const [checkoutDate, setCheckoutDate] = useState(todayDateValue);
+  const [returnDate, setReturnDate] = useState(todayDateValue);
 
   const loadCategories = async () => {
     const { data, error } = await supabase
@@ -81,6 +86,20 @@ function App() {
   const refreshCategories = async () => {
     setSyncing(true);
     await loadCategories();
+  };
+
+  const formatHistoryDate = (value: string | null) => {
+    if (!value) return 'Pending Return';
+
+    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? new Date(`${value}T12:00:00`)
+      : new Date(value);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return value;
+    }
+
+    return parsedDate.toLocaleDateString(undefined, { dateStyle: 'medium' });
   };
 
   // Fetch data from Firebase Real-time
@@ -200,7 +219,7 @@ function App() {
 
   const handleBorrow = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCategoryId || !selectedInstanceForBorrow || !borrowerName || !contactNumber || !borrowReason) return;
+    if (!selectedCategoryId || !selectedInstanceForBorrow || !borrowerName || !contactNumber || !borrowReason || !checkoutDate) return;
     
     const category = categories.find(c => c.id === selectedCategoryId);
     if (!category) return;
@@ -210,7 +229,7 @@ function App() {
       borrower: borrowerName,
       contactNumber: contactNumber,
       reason: borrowReason,
-      dateBorrowed: new Date().toISOString(),
+      dateBorrowed: checkoutDate,
       dateReturned: null
     };
 
@@ -228,6 +247,7 @@ function App() {
     setBorrowerName('');
     setContactNumber('');
     setBorrowReason('');
+    setCheckoutDate(todayDateValue);
 
     try {
       const { error } = await supabase.from('components').upsert(updatedCategory, { onConflict: 'id' });
@@ -238,15 +258,16 @@ function App() {
     }
   };
 
-  const handleReturn = async (instanceId: string) => {
-    if (!selectedCategoryId) return;
+  const handleReturn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCategoryId || !selectedInstanceForReturn || !returnDate) return;
     const category = categories.find(c => c.id === selectedCategoryId);
     if (!category) return;
 
     const updatedInstances = category.instances.map(inst => {
-      if (inst.id === instanceId) {
+      if (inst.id === selectedInstanceForReturn) {
         const updatedHistory = inst.history.map(h => 
-          h.dateReturned === null ? { ...h, dateReturned: new Date().toISOString() } : h
+          h.dateReturned === null ? { ...h, dateReturned: returnDate } : h
         );
         return { ...inst, history: updatedHistory };
       }
@@ -259,6 +280,9 @@ function App() {
       const { error } = await supabase.from('components').upsert(updatedCategory, { onConflict: 'id' });
       if (error) throw error;
       await refreshCategories();
+      setShowReturnModal(false);
+      setSelectedInstanceForReturn(null);
+      setReturnDate(todayDateValue);
     } catch (e: any) {
       alert("Failed to check-in: " + e.message);
     }
@@ -331,12 +355,17 @@ function App() {
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             {isBorrowed ? (
-              <button className="btn" style={{ background: 'var(--success)', color: '#000', padding: '6px 12px', fontSize: '0.9rem' }} onClick={() => handleReturn(inst.id)}>
+              <button className="btn" style={{ background: 'var(--success)', color: '#000', padding: '6px 12px', fontSize: '0.9rem' }} onClick={() => {
+                setSelectedInstanceForReturn(inst.id);
+                setReturnDate(todayDateValue);
+                setShowReturnModal(true);
+              }}>
                 <CheckCircle2 size={16} /> Check-in
               </button>
             ) : (
               <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.9rem' }} onClick={() => {
                 setSelectedInstanceForBorrow(inst.id);
+                setCheckoutDate(todayDateValue);
                 setShowBorrowModal(true);
               }}>
                 <ArrowRightLeft size={16} /> Check-out
@@ -395,9 +424,9 @@ function App() {
                         <td style={{ padding: '12px 20px', color: 'var(--text-secondary)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><FileText size={14} /> {record.reason}</div>
                         </td>
-                        <td style={{ padding: '12px 20px', color: 'var(--text-muted)' }}>{new Date(record.dateBorrowed).toLocaleString(undefined, {dateStyle: 'short', timeStyle: 'short'})}</td>
+                        <td style={{ padding: '12px 20px', color: 'var(--text-muted)' }}>{formatHistoryDate(record.dateBorrowed)}</td>
                         <td style={{ padding: '12px 20px', color: record.dateReturned ? 'var(--text-primary)' : 'var(--warning)' }}>
-                          {record.dateReturned ? new Date(record.dateReturned).toLocaleString(undefined, {dateStyle: 'short', timeStyle: 'short'}) : 'Pending Return'}
+                          {formatHistoryDate(record.dateReturned)}
                         </td>
                       </tr>
                     ))
@@ -742,12 +771,51 @@ function App() {
                   required 
                 />
               </div>
+              <div className="input-group" style={{ marginBottom: '30px' }}>
+                <label>Date of Check-out</label>
+                <input 
+                  type="date" 
+                  className="input-field" 
+                  value={checkoutDate}
+                  onChange={e => setCheckoutDate(e.target.value)}
+                  required 
+                />
+              </div>
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => {
                   setShowBorrowModal(false);
                   setSelectedInstanceForBorrow(null);
                 }}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Confirm Check-out</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Return Modal */}
+      {showReturnModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '450px', padding: '30px' }}>
+            <h2 style={{ marginBottom: '20px' }}>Check-in Unit</h2>
+            <form onSubmit={handleReturn}>
+              <div className="input-group" style={{ marginBottom: '30px' }}>
+                <label>Date of Check-in</label>
+                <input 
+                  type="date" 
+                  className="input-field" 
+                  value={returnDate}
+                  onChange={e => setReturnDate(e.target.value)}
+                  required 
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => {
+                  setShowReturnModal(false);
+                  setSelectedInstanceForReturn(null);
+                }}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Confirm Check-in</button>
               </div>
             </form>
           </div>
